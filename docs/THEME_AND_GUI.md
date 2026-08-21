@@ -1,4 +1,11 @@
-package main
+# dotdo-win: Fyne GUI & MonochromeTheme Reference
+
+This document preserves the Fyne GUI implementation and `MonochromeTheme` configuration for `dotdo-win`. Re-enable this when using a CGO environment supported by your toolchain (such as MSYS2 MinGW-w64).
+
+## 1. Monochrome Theme Implementation (`pkg/ui/theme.go`)
+
+```go
+package ui
 
 import (
 	"image/color"
@@ -62,9 +69,40 @@ func (m *MonochromeTheme) Size(name fyne.ThemeSizeName) float32 {
 		return 13
 	case theme.SizeNamePadding:
 		return 8
-	case theme.SizeNameInlineSpace:
+	case theme.SizeNameInnerPadding:
 		return 6
 	default:
 		return theme.DefaultTheme().Size(name)
 	}
 }
+```
+
+## 2. Main Entry Point for GUI (`main.go`)
+
+```go
+package main
+
+import (
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/app"
+
+	"github.com/nicoewok/dotdo-win/pkg/service"
+	"github.com/nicoewok/dotdo-win/pkg/ui"
+)
+
+func main() {
+	myApp := app.NewWithID("com.dotdo.win")
+	myApp.Settings().SetTheme(&ui.MonochromeTheme{})
+
+	win := myApp.NewWindow("dotdo")
+	win.Resize(fyne.NewSize(540, 650))
+
+	svc := service.NewService()
+	_ = svc.Init()
+
+	ui.SetupGUI(win, svc)
+
+	win.ShowAndRun()
+}
+```
+

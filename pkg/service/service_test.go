@@ -1,4 +1,4 @@
-package main
+package service
 
 import (
 	"os"
@@ -167,3 +167,4 @@ func TestService_DeleteSingleTask(t *testing.T) {
 		t.Errorf("unexpected remaining tasks: %+v", remaining)
 	}
 }
+

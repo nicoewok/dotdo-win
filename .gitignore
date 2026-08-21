@@ -2,3 +2,6 @@
 dist/
 completions/
 .env.local
+.vscode/
+.tmp/
+*.exe

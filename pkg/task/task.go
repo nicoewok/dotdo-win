@@ -1,4 +1,4 @@
-package main
+package task
 
 import (
 	"slices"
@@ -49,3 +49,4 @@ func (l *List) SortByDueDate() {
 		return 0
 	})
 }
+

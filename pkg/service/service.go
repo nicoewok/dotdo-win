@@ -1,10 +1,13 @@
-package main
+package service
 
 import (
 	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/nicoewok/dotdo-win/pkg/store"
+	"github.com/nicoewok/dotdo-win/pkg/task"
 )
 
 var (
@@ -27,7 +30,7 @@ func NewService(customDir ...string) *Service {
 		dir = customDir[0]
 	}
 	return &Service{
-		storageDir: GetStorageDir(dir),
+		storageDir: store.GetStorageDir(dir),
 	}
 }
 
@@ -38,13 +41,13 @@ func (s *Service) StorageDir() string {
 
 // Init ensures the storage directory and tasks.json file are created.
 func (s *Service) Init() error {
-	return EnsureInitialized(s.storageDir)
+	return store.EnsureInitialized(s.storageDir)
 }
 
 // ListTasks returns all tasks, optionally filtering only pending tasks (status != "done").
 // The tasks are returned sorted by due date.
-func (s *Service) ListTasks(pendingOnly bool) ([]Task, error) {
-	list, err := LoadTasks(s.storageDir)
+func (s *Service) ListTasks(pendingOnly bool) ([]task.Task, error) {
+	list, err := store.LoadTasks(s.storageDir)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +58,7 @@ func (s *Service) ListTasks(pendingOnly bool) ([]Task, error) {
 		return list.Tasks, nil
 	}
 
-	var pending []Task
+	var pending []task.Task
 	for _, t := range list.Tasks {
 		if t.Status != "done" {
 			pending = append(pending, t)
@@ -66,7 +69,7 @@ func (s *Service) ListTasks(pendingOnly bool) ([]Task, error) {
 
 // AddTask adds a new task with the given title and due date.
 // Returns an error if the title is empty or if a task with the exact title already exists.
-func (s *Service) AddTask(title string, due time.Time) (*Task, error) {
+func (s *Service) AddTask(title string, due time.Time) (*task.Task, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {
 		return nil, ErrEmptyTitle
@@ -76,7 +79,7 @@ func (s *Service) AddTask(title string, due time.Time) (*Task, error) {
 		return nil, err
 	}
 
-	list, err := LoadTasks(s.storageDir)
+	list, err := store.LoadTasks(s.storageDir)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +97,7 @@ func (s *Service) AddTask(title string, due time.Time) (*Task, error) {
 		}
 	}
 
-	newTask := Task{
+	newTask := task.Task{
 		ID:     maxID + 1,
 		Title:  title,
 		Status: "todo",
@@ -102,7 +105,7 @@ func (s *Service) AddTask(title string, due time.Time) (*Task, error) {
 	}
 
 	list.Tasks = append(list.Tasks, newTask)
-	if err := SaveTasks(s.storageDir, list); err != nil {
+	if err := store.SaveTasks(s.storageDir, list); err != nil {
 		return nil, err
 	}
 
@@ -111,7 +114,7 @@ func (s *Service) AddTask(title string, due time.Time) (*Task, error) {
 
 // SetTaskStatus updates the status of a task matching the given title.
 // Valid statuses are "todo", "doing", and "done".
-func (s *Service) SetTaskStatus(title string, status string) (*Task, error) {
+func (s *Service) SetTaskStatus(title string, status string) (*task.Task, error) {
 	title = strings.TrimSpace(title)
 	status = strings.ToLower(strings.TrimSpace(status))
 
@@ -119,7 +122,7 @@ func (s *Service) SetTaskStatus(title string, status string) (*Task, error) {
 		return nil, fmt.Errorf("%w: %s", ErrInvalidStatus, status)
 	}
 
-	list, err := LoadTasks(s.storageDir)
+	list, err := store.LoadTasks(s.storageDir)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +140,7 @@ func (s *Service) SetTaskStatus(title string, status string) (*Task, error) {
 	}
 
 	list.Tasks[foundIdx].Status = status
-	if err := SaveTasks(s.storageDir, list); err != nil {
+	if err := store.SaveTasks(s.storageDir, list); err != nil {
 		return nil, err
 	}
 
@@ -145,25 +148,25 @@ func (s *Service) SetTaskStatus(title string, status string) (*Task, error) {
 }
 
 // MarkDoing sets a task's status to "doing".
-func (s *Service) MarkDoing(title string) (*Task, error) {
+func (s *Service) MarkDoing(title string) (*task.Task, error) {
 	return s.SetTaskStatus(title, "doing")
 }
 
 // MarkDone sets a task's status to "done".
-func (s *Service) MarkDone(title string) (*Task, error) {
+func (s *Service) MarkDone(title string) (*task.Task, error) {
 	return s.SetTaskStatus(title, "done")
 }
 
 // RemoveDoneTasks removes all tasks with status "done" from storage.
 // Returns the count of removed tasks.
 func (s *Service) RemoveDoneTasks() (int, error) {
-	list, err := LoadTasks(s.storageDir)
+	list, err := store.LoadTasks(s.storageDir)
 	if err != nil {
 		return 0, err
 	}
 
 	initialCount := len(list.Tasks)
-	var kept []Task
+	var kept []task.Task
 
 	for _, t := range list.Tasks {
 		if t.Status != "done" {
@@ -177,7 +180,7 @@ func (s *Service) RemoveDoneTasks() (int, error) {
 	}
 
 	list.Tasks = kept
-	if err := SaveTasks(s.storageDir, list); err != nil {
+	if err := store.SaveTasks(s.storageDir, list); err != nil {
 		return 0, err
 	}
 
@@ -185,15 +188,15 @@ func (s *Service) RemoveDoneTasks() (int, error) {
 }
 
 // DeleteTask removes a single task matching title from storage.
-func (s *Service) DeleteTask(title string) (*Task, error) {
+func (s *Service) DeleteTask(title string) (*task.Task, error) {
 	title = strings.TrimSpace(title)
-	list, err := LoadTasks(s.storageDir)
+	list, err := store.LoadTasks(s.storageDir)
 	if err != nil {
 		return nil, err
 	}
 
 	foundIdx := -1
-	var removed Task
+	var removed task.Task
 	for i, t := range list.Tasks {
 		if strings.EqualFold(t.Title, title) {
 			foundIdx = i
@@ -207,7 +210,7 @@ func (s *Service) DeleteTask(title string) (*Task, error) {
 	}
 
 	list.Tasks = append(list.Tasks[:foundIdx], list.Tasks[foundIdx+1:]...)
-	if err := SaveTasks(s.storageDir, list); err != nil {
+	if err := store.SaveTasks(s.storageDir, list); err != nil {
 		return nil, err
 	}
 
@@ -215,14 +218,14 @@ func (s *Service) DeleteTask(title string) (*Task, error) {
 }
 
 // DeleteTaskByID removes a single task matching ID from storage.
-func (s *Service) DeleteTaskByID(id int) (*Task, error) {
-	list, err := LoadTasks(s.storageDir)
+func (s *Service) DeleteTaskByID(id int) (*task.Task, error) {
+	list, err := store.LoadTasks(s.storageDir)
 	if err != nil {
 		return nil, err
 	}
 
 	foundIdx := -1
-	var removed Task
+	var removed task.Task
 	for i, t := range list.Tasks {
 		if t.ID == id {
 			foundIdx = i
@@ -236,7 +239,7 @@ func (s *Service) DeleteTaskByID(id int) (*Task, error) {
 	}
 
 	list.Tasks = append(list.Tasks[:foundIdx], list.Tasks[foundIdx+1:]...)
-	if err := SaveTasks(s.storageDir, list); err != nil {
+	if err := store.SaveTasks(s.storageDir, list); err != nil {
 		return nil, err
 	}
 
@@ -245,6 +248,6 @@ func (s *Service) DeleteTaskByID(id int) (*Task, error) {
 
 // Sync performs a full Git synchronization (pull with rebase and push) for storage.
 func (s *Service) Sync() error {
-	return FullGitSync(s.storageDir)
+	return store.FullGitSync(s.storageDir)
 }
 

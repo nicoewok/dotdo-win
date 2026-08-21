@@ -1,4 +1,4 @@
-package main
+package store
 
 import (
 	"bytes"
@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/nicoewok/dotdo-win/pkg/task"
 )
 
 // GetStorageDir returns the storage directory path.
@@ -45,7 +47,7 @@ func EnsureInitialized(storageDir string) error {
 
 	// Create tasks.json if missing
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		empty := List{Tasks: []Task{}}
+		empty := task.List{Tasks: []task.Task{}}
 		data, err := json.MarshalIndent(empty, "", "  ")
 		if err != nil {
 			return fmt.Errorf("failed to marshal empty task list: %w", err)
@@ -59,13 +61,13 @@ func EnsureInitialized(storageDir string) error {
 }
 
 // LoadTasks loads task list from tasks.json in storageDir.
-func LoadTasks(storageDir string) (List, error) {
+func LoadTasks(storageDir string) (task.List, error) {
 	dir := GetStorageDir(storageDir)
 	path := GetStoragePath(dir)
-	var list List
+	var list task.List
 
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return List{Tasks: []Task{}}, nil
+		return task.List{Tasks: []task.Task{}}, nil
 	}
 
 	data, err := os.ReadFile(path)
@@ -81,7 +83,7 @@ func LoadTasks(storageDir string) (List, error) {
 }
 
 // SaveTasks saves task list to tasks.json in storageDir and triggers background git sync.
-func SaveTasks(storageDir string, list List) error {
+func SaveTasks(storageDir string, list task.List) error {
 	dir := GetStorageDir(storageDir)
 	path := GetStoragePath(dir)
 
@@ -166,3 +168,4 @@ func getGitStatus(dir string) (string, error) {
 	out, err := cmd.Output()
 	return string(out), err
 }
+
