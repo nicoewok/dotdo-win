@@ -1,0 +1,42 @@
+version: 2
+project_name: dotdo
+
+before:
+  hooks:
+    - go mod tidy
+    - chmod +x generate_completions.sh
+    - ./generate_completions.sh
+
+builds:
+  - env: [CGO_ENABLED=0]
+    goos: [linux]
+    goarch: [amd64, arm64]
+    binary: dotdo
+    main: ./main.go 
+
+archives:
+  - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+
+nfpms:
+  - file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Arch }}"
+    id: dotdo
+    package_name: dotdo
+    maintainer: "Nico Lang <nicolang0416@gmail.com>"
+    description: "Dot-styled todo list TUI"
+    homepage: "https://github.com/nicoewok/dotdo"
+    license: MIT
+    formats: [deb]
+    
+    contents:
+      
+      # 2. System-wide Bash Completion
+      - src: ./completions/dotdo.bash
+        dst: /usr/share/bash-completion/completions/dotdo
+
+      # 3. System-wide Zsh Completion
+      - src: ./completions/dotdo.zsh
+        dst: /usr/share/zsh/site-functions/_dotdo
+
+snapshot:
+  version_template: "1.0.0-snapshot"

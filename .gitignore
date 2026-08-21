@@ -1,0 +1,4 @@
+/go.sum
+dist/
+completions/
+.env.local
