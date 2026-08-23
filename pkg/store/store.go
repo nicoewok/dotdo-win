@@ -11,21 +11,40 @@ import (
 	"github.com/nicoewok/dotdo-win/pkg/task"
 )
 
+// Config represents application settings stored in config.json.
+type Config struct {
+	AutoSync   bool   `json:"auto_sync"`
+	SyncBranch string `json:"sync_branch"`
+	GithubRepo string `json:"github_repo,omitempty"`
+}
+
+// IsGithubConnected returns true if github_repo is non-empty in config.json.
+func IsGithubConnected(storageDir string) bool {
+	cfg, err := LoadConfig(storageDir)
+	if err != nil {
+		return false
+	}
+	return cfg.GithubRepo != ""
+}
+
 // GetStorageDir returns the storage directory path.
 // If customDir is non-empty, it returns customDir.
-// Otherwise, it returns default ~/.dotdo.
+// Otherwise, it returns default AppData/dotdo (%APPDATA%\dotdo on Windows).
 func GetStorageDir(customDir string) string {
 	if customDir != "" {
 		return filepath.Clean(customDir)
 	}
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		home = os.Getenv("USERPROFILE")
-		if home == "" {
-			home = "."
+	appData := os.Getenv("APPDATA")
+	if appData == "" {
+		cfgDir, err := os.UserConfigDir()
+		if err == nil && cfgDir != "" {
+			appData = cfgDir
+		} else {
+			home, _ := os.UserHomeDir()
+			appData = home
 		}
 	}
-	return filepath.Join(home, ".dotdo")
+	return filepath.Join(appData, "dotdo")
 }
 
 // GetStoragePath returns the path to tasks.json within storageDir.
@@ -33,10 +52,16 @@ func GetStoragePath(storageDir string) string {
 	return filepath.Join(storageDir, "tasks.json")
 }
 
-// EnsureInitialized checks for the storage folder and file, creating them if missing.
+// GetConfigPath returns the path to config.json within storageDir.
+func GetConfigPath(storageDir string) string {
+	return filepath.Join(storageDir, "config.json")
+}
+
+// EnsureInitialized checks for storage folder, tasks.json, and config.json, creating them if missing.
 func EnsureInitialized(storageDir string) error {
 	dir := GetStorageDir(storageDir)
 	path := GetStoragePath(dir)
+	cfgPath := GetConfigPath(dir)
 
 	// Create directory if missing
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
@@ -55,6 +80,60 @@ func EnsureInitialized(storageDir string) error {
 		if err := os.WriteFile(path, data, 0644); err != nil {
 			return fmt.Errorf("failed to write tasks.json: %w", err)
 		}
+	}
+
+	// Create config.json if missing
+	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
+		defaultCfg := Config{
+			AutoSync:   true,
+			SyncBranch: "main",
+		}
+		data, err := json.MarshalIndent(defaultCfg, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal config: %w", err)
+		}
+		if err := os.WriteFile(cfgPath, data, 0644); err != nil {
+			return fmt.Errorf("failed to write config.json: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// LoadConfig loads application configuration from config.json.
+func LoadConfig(storageDir string) (Config, error) {
+	dir := GetStorageDir(storageDir)
+	cfgPath := GetConfigPath(dir)
+	var cfg Config
+
+	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
+		return Config{AutoSync: true, SyncBranch: "main"}, nil
+	}
+
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		return cfg, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return cfg, fmt.Errorf("failed to unmarshal config file: %w", err)
+	}
+
+	return cfg, nil
+}
+
+// SaveConfig saves configuration to config.json.
+func SaveConfig(storageDir string, cfg Config) error {
+	dir := GetStorageDir(storageDir)
+	cfgPath := GetConfigPath(dir)
+
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	if err := os.WriteFile(cfgPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
 	}
 
 	return nil
@@ -106,7 +185,7 @@ func BackgroundGitSync(repoPath string) {
 	if _, err := os.Stat(filepath.Join(repoPath, ".git")); os.IsNotExist(err) {
 		return
 	}
-	_ = runGit(repoPath, "add", "tasks.json")
+	_ = runGit(repoPath, "add", "tasks.json", "config.json")
 	_ = runGit(repoPath, "commit", "-m", "dotdo: sync")
 	_ = runGit(repoPath, "push", "origin", "main")
 }
@@ -125,7 +204,7 @@ func FullGitSync(storageDir string) error {
 	}
 
 	if status != "" {
-		if err := runGit(dir, "add", "tasks.json"); err != nil {
+		if err := runGit(dir, "add", "tasks.json", "config.json"); err != nil {
 			return fmt.Errorf("git add failed: %w", err)
 		}
 		if err := runGit(dir, "commit", "-m", "dotdo: auto sync update"); err != nil {
@@ -135,7 +214,6 @@ func FullGitSync(storageDir string) error {
 
 	// Try pull rebase on origin master or main
 	if err := runGit(dir, "pull", "origin", "master", "--rebase"); err != nil {
-		// Fallback attempt for 'main' branch if master fails
 		if errMain := runGit(dir, "pull", "origin", "main", "--rebase"); errMain != nil {
 			return fmt.Errorf("git pull rebase failed: %w", err)
 		}
@@ -168,4 +246,3 @@ func getGitStatus(dir string) (string, error) {
 	out, err := cmd.Output()
 	return string(out), err
 }
-

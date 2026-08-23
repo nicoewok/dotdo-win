@@ -50,4 +50,11 @@ go build -o dotdo.exe .
 - `pkg/service`: High-level task operations (add, list, status, delete, git sync).
 - `pkg/store`: Local JSON storage manager (`%USERPROFILE%\.dotdo\tasks.json`).
 - `pkg/task`: Task data model.
+- `assets/scientifica.ttf`: Embedded `scientifica` pixel font.
 - `docs/THEME_AND_GUI.md`: Reference documentation for the original Fyne Monochrome Theme.
+
+---
+
+## Credits
+
+- **Font**: [scientifica](https://github.com/nerdypepper/scientifica) by **NerdyPepper** — a tall, slender pixel font for coders.
