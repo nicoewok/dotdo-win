@@ -50,3 +50,45 @@ func (l *List) SortByDueDate() {
 	})
 }
 
+// DeduplicateIDs ensures that all tasks in the list have unique positive IDs.
+// If duplicate IDs exist, subsequent occurrences are reassigned starting at maxID + 1.
+func (l *List) DeduplicateIDs() bool {
+	if len(l.Tasks) == 0 {
+		return false
+	}
+
+	maxID := 0
+	for _, t := range l.Tasks {
+		if t.ID > maxID {
+			maxID = t.ID
+		}
+	}
+
+	seen := make(map[int]bool)
+	modified := false
+
+	for i := range l.Tasks {
+		id := l.Tasks[i].ID
+		if id <= 0 || seen[id] {
+			maxID++
+			l.Tasks[i].ID = maxID
+			seen[maxID] = true
+			modified = true
+		} else {
+			seen[id] = true
+		}
+	}
+
+	return modified
+}
+
+// NextID returns maxID + 1 for assigning a new task ID.
+func (l *List) NextID() int {
+	maxID := 0
+	for _, t := range l.Tasks {
+		if t.ID > maxID {
+			maxID = t.ID
+		}
+	}
+	return maxID + 1
+}

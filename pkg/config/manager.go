@@ -11,11 +11,11 @@ import (
 )
 
 const (
-	ServiceName = "DotDoApp"
+	ServiceName = "dotdo"
 	TokenKey    = "access_token"
 )
 
-// Config represents non-sensitive configuration stored in %LOCALAPPDATA%\DotDo\config.json.
+// Config represents non-sensitive configuration stored in %LOCALAPPDATA%\dotdo\config.json.
 type Config struct {
 	Owner  string `json:"owner"`
 	Repo   string `json:"repo"`
@@ -28,7 +28,7 @@ type Manager struct {
 }
 
 // NewManager creates a new Manager instance.
-// Option customDir overrides default %LOCALAPPDATA%\DotDo storage directory (useful for testing).
+// Option customDir overrides default %LOCALAPPDATA%\dotdo storage directory (useful for testing).
 func NewManager(customDir ...string) *Manager {
 	dir := ""
 	if len(customDir) > 0 {
@@ -38,7 +38,7 @@ func NewManager(customDir ...string) *Manager {
 }
 
 // GetConfigDir returns the directory path for configuration.
-// Defaults to %LOCALAPPDATA%\DotDo (or fallback %APPDATA%\DotDo / user config dir).
+// Defaults to %LOCALAPPDATA%\dotdo (or fallback %APPDATA%\dotdo / user config dir).
 func (m *Manager) GetConfigDir() string {
 	if m.customDir != "" {
 		return filepath.Clean(m.customDir)
@@ -59,7 +59,7 @@ func (m *Manager) GetConfigDir() string {
 			}
 		}
 	}
-	return filepath.Join(localAppData, "DotDo")
+	return filepath.Join(localAppData, "dotdo")
 }
 
 // GetConfigPath returns the full path to config.json within the config directory.

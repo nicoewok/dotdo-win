@@ -2,7 +2,7 @@
   "RT_GROUP_ICON": {
     "APP": {
       "0000": [
-        "../assets/icon.png"
+        "../assets/icon.ico"
       ]
     }
   },
@@ -10,10 +10,10 @@
     "#1": {
       "0409": {
         "identity": {
-          "name": "DOT DO Task Manager",
+          "name": "dotdo",
           "version": "1.0.0.0"
         },
-        "description": "DOT DO Task Manager",
+        "description": "dotdo",
         "minimum-os": "win7",
         "execution-level": "as invoker",
         "ui-access": false,

@@ -1,8 +1,8 @@
-# dotdo-win
+# dotdo (Windows)
 
-> Desktop task manager built with Go and Gio (`gioui.org`).
+> Simple todo-list app with syncing
 
-`dotdo-win` is a native desktop todo application built with Go and the **Gio** immediate-mode GUI framework (`gioui.org`). It displays your task list and keeps your tasks synchronized across devices via Git.
+`dotdo-win` is a native desktop todo application built with Go. It displays your task list and keeps your tasks synchronized across devices via Git.
 
 ---
 
@@ -22,36 +22,46 @@
 
 ---
 
-## Features & Advantages of Gio
+## Installation & Features
 
-- **Pure Go Desktop GUI**: Built using Gio (`gioui.org`), which compiles directly into native Windows Direct3D 11 graphics.
-- **No CGO Required**: Runs cleanly on Windows with `CGO_ENABLED=0` or standard Go toolchain without requiring external MinGW GCC setups.
-- **Task Management**: Automatically loads local JSON tasks (`%USERPROFILE%\.dotdo\tasks.json`) and displays task statuses (`●` todo, `◐` doing, `✔` done).
+### Installation & Shortcuts
+- Download and run the `dotdo-Setup-1.0.0.exe` installer.
+- Interactive setup options allow you to automatically add dotdo to your **Start Menu** and create a **Desktop** shortcut.
+- All application assets (fonts, icons) are embedded directly into `dotdo.exe`, making the app fully portable anywhere on Windows.
+
+### Task Synchronization via GitHub
+- To synchronize your tasks across devices, you need a **private GitHub repository** named `.dotdo` (e.g. `your-username/.dotdo`).
+- Within dotdo, click **Connect GitHub** and enter your Personal Access Token (PAT) with `repo` scope.
+- dotdo syncs your `tasks.json` with your private `.dotdo` repository when you click **Pull** or **Push**.
+- For detailed technical documentation on link generation, config structure, and token storage, see [docs/GITHUB_INTEGRATION.md](file:///d:/dev/dotdo-win/docs/GITHUB_INTEGRATION.md).
+
+### Windows Uninstaller
+Uninstall via "Add or remove programs". Removes all program files, Start Menu/Desktop shortcuts, and completely deletes local user data folders (`%APPDATA%\dotdo` containing `tasks.json` & `config.json` and `%LOCALAPPDATA%\dotdo`).
 
 ---
 
-## Building and Running
+## Building from Source & Packaging Installer
 
-Simply run with the standard Go toolchain:
+### Requirements
+- **Go 1.22+**
+- **Git**
+- **Inno Setup 6** (optional, required only for compiling the `dotdo-Setup-1.0.0.exe` installer)
 
-```cmd
-# Run directly:
-go run .
-
-# Or build the executable:
-go build -o dotdo.exe .
+### Building the Executable
+```powershell
+go build -ldflags="-H=windowsgui" -o dotdo.exe .
 ```
 
----
+### Packaging & Generating Installer
+To compile the GUI executable, package assets into a portable ZIP release, and build the Windows setup installer:
 
-## Project Structure
+```powershell
+powershell -ExecutionPolicy Bypass -File .\package.ps1
+```
 
-- `main.go`: Gio GUI application entry point.
-- `pkg/service`: High-level task operations (add, list, status, delete, git sync).
-- `pkg/store`: Local JSON storage manager (`%USERPROFILE%\.dotdo\tasks.json`).
-- `pkg/task`: Task data model.
-- `assets/scientifica.ttf`: Embedded `scientifica` pixel font.
-- `docs/THEME_AND_GUI.md`: Reference documentation for the original Fyne Monochrome Theme.
+This generates the following artifacts in the `dist/` directory:
+- `dist/dotdo-v1.0.0-windows-amd64.zip` (Standalone portable package)
+- `dist/dotdo-Setup-1.0.0.exe` (Windows Setup Installer, compiled via Inno Setup `ISCC.exe`)
 
 ---
 

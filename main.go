@@ -8,6 +8,7 @@ import (
 	_ "image/png"
 	"log"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -62,12 +63,13 @@ type UIState struct {
 	svc                *service.Service
 	th                 *material.Theme
 	bunnyTh            *material.Theme
-	activeView         string // "list" or "add"
+	activeView         string // "list", "add", or "github_connect"
 	showDone           bool   // toggle to show or hide completed tasks
 	isSyncDropdownOpen bool
 	addBtn             widget.Clickable
 	backBtn            widget.Clickable
-	syncBtn            widget.Clickable
+	pullBtn            widget.Clickable
+	pushBtn            widget.Clickable
 	syncDropdownBtn    widget.Clickable
 	githubBtn          widget.Clickable
 	purgeBtn           widget.Clickable
@@ -79,6 +81,13 @@ type UIState struct {
 	dueEditor          widget.Editor
 	delBtns            map[int]*widget.Clickable
 	statusBtns         map[int]*widget.Clickable
+
+	// GitHub Connection View Widgets & State
+	githubBackBtn  widget.Clickable
+	patConnectBtn  widget.Clickable
+	openPatUrlBtn  widget.Clickable
+	patTokenEditor widget.Editor
+	githubMsg      string
 }
 
 func main() {
@@ -91,7 +100,7 @@ func main() {
 		w := new(app.Window)
 		fixedSize := app.Size(unit.Dp(560), unit.Dp(780))
 		w.Option(
-			app.Title("DOT ● DO - Task Manager"),
+			app.Title("dotdo"),
 			fixedSize,
 			app.MinSize(unit.Dp(560), unit.Dp(780)),
 			app.MaxSize(unit.Dp(560), unit.Dp(780)),
@@ -99,14 +108,16 @@ func main() {
 
 		uiState := &UIState{
 			svc:        svc,
+			th:         nil,
 			activeView: "list",
-			showDone:   true,
+			showDone:   false,
+			syncMsg:    "Ready",
 			delBtns:    make(map[int]*widget.Clickable),
 			statusBtns: make(map[int]*widget.Clickable),
-			syncMsg:    "Synced",
 		}
 		uiState.titleEditor.SingleLine = true
 		uiState.dueEditor.SingleLine = true
+		uiState.patTokenEditor.SingleLine = true
 
 		if err := run(w, uiState); err != nil {
 			log.Fatal(err)
@@ -114,6 +125,16 @@ func main() {
 		os.Exit(0)
 	}()
 	app.Main()
+}
+
+func openURL(rawURL string) {
+	if rawURL == "" {
+		return
+	}
+	err := exec.Command("rundll32", "url.dll,FileProtocolHandler", rawURL).Start()
+	if err != nil {
+		_ = exec.Command("powershell", "-NoProfile", "-Command", fmt.Sprintf("Start-Process '%s'", rawURL)).Start()
+	}
 }
 
 func run(w *app.Window, state *UIState) error {
@@ -129,6 +150,8 @@ func run(w *app.Window, state *UIState) error {
 	state.bunnyTh = material.NewTheme()
 	if bunnyFaces, err := opentype.ParseCollection(dotGothicFontData); err == nil && len(bunnyFaces) > 0 {
 		state.bunnyTh.Shaper = text.NewShaper(text.WithCollection(bunnyFaces))
+	} else {
+		state.bunnyTh.Shaper = state.th.Shaper
 	}
 
 	var ops op.Ops
@@ -150,17 +173,53 @@ func run(w *app.Window, state *UIState) error {
 				state.dueEditor.SetText("")
 			}
 
-			if state.backBtn.Clicked(gtx) || state.cancelBtn.Clicked(gtx) {
+			if state.backBtn.Clicked(gtx) || state.cancelBtn.Clicked(gtx) || state.githubBackBtn.Clicked(gtx) {
 				state.activeView = "list"
 				state.isSyncDropdownOpen = false
 			}
 
-			if state.syncBtn.Clicked(gtx) {
-				state.syncMsg = "Syncing..."
+			if state.pullBtn.Clicked(gtx) {
+				state.syncMsg = "Pulling..."
 				state.isSyncDropdownOpen = false
 				go func() {
-					_ = state.svc.Sync()
-					state.syncMsg = "Synced"
+					if err := state.svc.Pull(); err != nil {
+						if !store.IsGithubConnected(state.svc.StorageDir()) {
+							state.syncMsg = "Can't pull! Please connect your GitHub account by using the dropdown on the right."
+						} else {
+							state.syncMsg = fmt.Sprintf("Pull Err: %v", err)
+						}
+					} else {
+						state.syncMsg = "Pulled"
+						time.AfterFunc(3*time.Second, func() {
+							if state.syncMsg == "Pulled" {
+								state.syncMsg = "Ready"
+								w.Invalidate()
+							}
+						})
+					}
+					w.Invalidate()
+				}()
+			}
+
+			if state.pushBtn.Clicked(gtx) {
+				state.syncMsg = "Pushing..."
+				state.isSyncDropdownOpen = false
+				go func() {
+					if err := state.svc.Push(); err != nil {
+						if !store.IsGithubConnected(state.svc.StorageDir()) {
+							state.syncMsg = "Can't push! Please connect your GitHub account by using the dropdown on the right."
+						} else {
+							state.syncMsg = fmt.Sprintf("Push Err: %v", err)
+						}
+					} else {
+						state.syncMsg = "Pushed"
+						time.AfterFunc(3*time.Second, func() {
+							if state.syncMsg == "Pushed" {
+								state.syncMsg = "Ready"
+								w.Invalidate()
+							}
+						})
+					}
 					w.Invalidate()
 				}()
 			}
@@ -171,6 +230,37 @@ func run(w *app.Window, state *UIState) error {
 
 			if state.githubBtn.Clicked(gtx) {
 				state.isSyncDropdownOpen = false
+				if store.IsGithubConnected(state.svc.StorageDir()) {
+					_ = state.svc.DisconnectGithub()
+					state.syncMsg = "Disconnected"
+				} else {
+					state.activeView = "github_connect"
+					state.githubMsg = ""
+				}
+			}
+
+			if state.openPatUrlBtn.Clicked(gtx) {
+				openURL("https://github.com/settings/tokens/new?scopes=repo&description=dotdo-windows")
+			}
+
+			if state.patConnectBtn.Clicked(gtx) {
+				token := strings.TrimSpace(state.patTokenEditor.Text())
+
+				if token == "" {
+					state.githubMsg = "Please enter a valid Personal Access Token."
+				} else {
+					state.githubMsg = "Validating token & connecting..."
+					go func() {
+						if err := state.svc.ConfigureGithub(token, "", ".dotdo"); err != nil {
+							state.githubMsg = fmt.Sprintf("Connection error: %v", err)
+						} else {
+							state.syncMsg = "Connected"
+							state.githubMsg = "Successfully connected to GitHub!"
+							state.activeView = "list"
+						}
+						w.Invalidate()
+					}()
+				}
 			}
 
 			if state.toggleDoneBtn.Clicked(gtx) {
@@ -246,10 +336,14 @@ func run(w *app.Window, state *UIState) error {
 						Left:   unit.Dp(20),
 						Right:  unit.Dp(20),
 					}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						if state.activeView == "add" {
+						switch state.activeView {
+						case "add":
 							return renderAddView(gtx, state)
+						case "github_connect":
+							return renderGithubConnectView(gtx, state)
+						default:
+							return renderListView(gtx, state, tasks, &listLayout)
 						}
-						return renderListView(gtx, state, tasks, &listLayout)
 					})
 				}),
 
@@ -362,37 +456,47 @@ func renderListView(gtx layout.Context, state *UIState, tasks []task.Task, listL
 								}),
 							)
 						}),
-						// Action Buttons: + Add & Attached Sync Dropdown (Sync ▼)
+						// Action Buttons: + Add, Stacked Pull & Push, & Attached Dropdown (▼)
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 									btn := material.Button(state.th, &state.addBtn, "+ Add")
-									btn.TextSize = unit.Sp(18)
+									btn.TextSize = unit.Sp(16)
 									btn.Background = accentRed
 									btn.Color = textPrimary
 									return btn.Layout(gtx)
 								}),
-								layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
+								layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
 
-								// Sync Attached Button Pair (Sync + ▼)
+								// Stacked Pull (top) & Push (bottom) Buttons
 								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-									return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+									return layout.Flex{Axis: layout.Vertical, Alignment: layout.Start}.Layout(gtx,
 										layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-											btn := material.Button(state.th, &state.syncBtn, "Sync")
-											btn.TextSize = unit.Sp(18)
+											btn := material.Button(state.th, &state.pullBtn, "⬇ Pull")
+											btn.TextSize = unit.Sp(13)
 											btn.Background = inputBg
-											btn.Color = textPrimary
+											btn.Color = accentGreen
 											return btn.Layout(gtx)
 										}),
-										layout.Rigid(layout.Spacer{Width: unit.Dp(2)}.Layout),
+										layout.Rigid(layout.Spacer{Height: unit.Dp(3)}.Layout),
 										layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-											arrBtn := material.Button(state.th, &state.syncDropdownBtn, "▼")
-											arrBtn.TextSize = unit.Sp(14)
-											arrBtn.Background = inputBg
-											arrBtn.Color = textPrimary
-											return arrBtn.Layout(gtx)
+											btn := material.Button(state.th, &state.pushBtn, "⬆ Push")
+											btn.TextSize = unit.Sp(13)
+											btn.Background = inputBg
+											btn.Color = accentOrange
+											return btn.Layout(gtx)
 										}),
 									)
+								}),
+								layout.Rigid(layout.Spacer{Width: unit.Dp(4)}.Layout),
+
+								// Attached Dropdown Button (▼)
+								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+									arrBtn := material.Button(state.th, &state.syncDropdownBtn, "▼")
+									arrBtn.TextSize = unit.Sp(14)
+									arrBtn.Background = inputBg
+									arrBtn.Color = textPrimary
+									return arrBtn.Layout(gtx)
 								}),
 							)
 						}),
@@ -609,6 +713,139 @@ func renderAddView(gtx layout.Context, state *UIState) layout.Dimensions {
 									return btn.Layout(gtx)
 								}),
 							)
+						}),
+					)
+				})
+			})
+		}),
+	)
+}
+
+func renderGithubConnectView(gtx layout.Context, state *UIState) layout.Dimensions {
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		// Header Banner
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return renderCard(gtx, cardBg, func(gtx layout.Context) layout.Dimensions {
+				return layout.Inset{
+					Top:    unit.Dp(14),
+					Bottom: unit.Dp(14),
+					Left:   unit.Dp(18),
+					Right:  unit.Dp(18),
+				}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							lbl := material.Body1(state.bunnyTh, bunnyASCII)
+							lbl.TextSize = unit.Sp(16)
+							lbl.Color = textPrimary
+							return lbl.Layout(gtx)
+						}),
+						layout.Rigid(layout.Spacer{Width: unit.Dp(16)}.Layout),
+						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+							h := material.H5(state.th, "CONNECT GITHUB")
+							h.TextSize = unit.Sp(22)
+							h.Color = textPrimary
+							return h.Layout(gtx)
+						}),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							btn := material.Button(state.th, &state.githubBackBtn, "← Back")
+							btn.TextSize = unit.Sp(18)
+							btn.Background = inputBg
+							btn.Color = textPrimary
+							return btn.Layout(gtx)
+						}),
+					)
+				})
+			})
+		}),
+
+		layout.Rigid(layout.Spacer{Height: unit.Dp(20)}.Layout),
+
+		// Content Card - Streamlined PAT Setup
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return renderCard(gtx, cardBg, func(gtx layout.Context) layout.Dimensions {
+				return layout.Inset{
+					Top:    unit.Dp(24),
+					Bottom: unit.Dp(24),
+					Left:   unit.Dp(24),
+					Right:  unit.Dp(24),
+				}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							h := material.H6(state.th, "CONNECT WITH PERSONAL ACCESS TOKEN")
+							h.TextSize = unit.Sp(18)
+							h.Color = accentGreen
+							return h.Layout(gtx)
+						}),
+						layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
+
+						// Prominent Big Red Repository Requirement Warning
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							req := material.Body1(state.th, "REQUIRED: You MUST create a private repo named '.dotdo' on your GitHub account!")
+							req.Font.Weight = font.Bold
+							req.TextSize = unit.Sp(16)
+							req.Color = accentRed
+							return req.Layout(gtx)
+						}),
+
+						layout.Rigid(layout.Spacer{Height: unit.Dp(14)}.Layout),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							btn := material.Button(state.th, &state.openPatUrlBtn, "Open GitHub PAT Generator Page")
+							btn.TextSize = unit.Sp(16)
+							btn.Background = inputBg
+							btn.Color = accentOrange
+							return btn.Layout(gtx)
+						}),
+						layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							tip := material.Body2(state.th, "Note: GitHub defaults Expiration to 30 days. Be sure to change\nExpiration to 'No expiration' or '1 year' so sync keeps working!")
+							tip.TextSize = unit.Sp(13)
+							tip.Color = accentOrange
+							return tip.Layout(gtx)
+						}),
+
+						layout.Rigid(layout.Spacer{Height: unit.Dp(20)}.Layout),
+
+						// Token Field
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							lbl := material.Body1(state.th, "Personal Access Token (PAT):")
+							lbl.TextSize = unit.Sp(16)
+							lbl.Color = textPrimary
+							return lbl.Layout(gtx)
+						}),
+						layout.Rigid(layout.Spacer{Height: unit.Dp(6)}.Layout),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							return renderCard(gtx, inputBg, func(gtx layout.Context) layout.Dimensions {
+								return layout.Inset{Top: unit.Dp(10), Bottom: unit.Dp(10), Left: unit.Dp(12), Right: unit.Dp(12)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+									e := material.Editor(state.th, &state.patTokenEditor, "Paste ghp_... or github_pat_... token here")
+									e.TextSize = unit.Sp(16)
+									e.Color = textPrimary
+									return e.Layout(gtx)
+								})
+							})
+						}),
+
+						layout.Rigid(layout.Spacer{Height: unit.Dp(20)}.Layout),
+
+						// PAT Connect Button
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							btn := material.Button(state.th, &state.patConnectBtn, "Save & Connect GitHub")
+							btn.TextSize = unit.Sp(18)
+							btn.Background = accentGreen
+							btn.Color = bgDark
+							return btn.Layout(gtx)
+						}),
+
+						layout.Rigid(layout.Spacer{Height: unit.Dp(14)}.Layout),
+
+						// Status / Info message
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							if state.githubMsg == "" {
+								return layout.Dimensions{}
+							}
+							lbl := material.Body2(state.th, state.githubMsg)
+							lbl.TextSize = unit.Sp(14)
+							lbl.Color = accentOrange
+							return lbl.Layout(gtx)
 						}),
 					)
 				})

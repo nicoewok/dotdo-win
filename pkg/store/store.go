@@ -13,9 +13,9 @@ import (
 
 // Config represents application settings stored in config.json.
 type Config struct {
-	AutoSync   bool   `json:"auto_sync"`
 	SyncBranch string `json:"sync_branch"`
 	GithubRepo string `json:"github_repo,omitempty"`
+	Owner      string `json:"owner,omitempty"`
 }
 
 // IsGithubConnected returns true if github_repo is non-empty in config.json.
@@ -57,7 +57,16 @@ func GetConfigPath(storageDir string) string {
 	return filepath.Join(storageDir, "config.json")
 }
 
-// EnsureInitialized checks for storage folder, tasks.json, and config.json, creating them if missing.
+// EnsureGitignore ensures that .gitignore exists and ignores config.json.
+func EnsureGitignore(dir string) error {
+	gitignorePath := filepath.Join(dir, ".gitignore")
+	if _, err := os.Stat(gitignorePath); os.IsNotExist(err) {
+		return os.WriteFile(gitignorePath, []byte("config.json\n"), 0644)
+	}
+	return nil
+}
+
+// EnsureInitialized checks for storage folder, tasks.json, config.json, and .gitignore, creating them if missing.
 func EnsureInitialized(storageDir string) error {
 	dir := GetStorageDir(storageDir)
 	path := GetStoragePath(dir)
@@ -69,6 +78,9 @@ func EnsureInitialized(storageDir string) error {
 			return fmt.Errorf("failed to create storage directory: %w", err)
 		}
 	}
+
+	// Ensure .gitignore ignores config.json
+	_ = EnsureGitignore(dir)
 
 	// Create tasks.json if missing
 	if _, err := os.Stat(path); os.IsNotExist(err) {
@@ -85,7 +97,6 @@ func EnsureInitialized(storageDir string) error {
 	// Create config.json if missing
 	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
 		defaultCfg := Config{
-			AutoSync:   true,
 			SyncBranch: "main",
 		}
 		data, err := json.MarshalIndent(defaultCfg, "", "  ")
@@ -107,7 +118,7 @@ func LoadConfig(storageDir string) (Config, error) {
 	var cfg Config
 
 	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
-		return Config{AutoSync: true, SyncBranch: "main"}, nil
+		return Config{SyncBranch: "main"}, nil
 	}
 
 	data, err := os.ReadFile(cfgPath)
@@ -158,13 +169,19 @@ func LoadTasks(storageDir string) (task.List, error) {
 		return list, fmt.Errorf("failed to unmarshal tasks file: %w", err)
 	}
 
+	// Ensure duplicate IDs are detected and resolved automatically
+	_ = list.DeduplicateIDs()
+
 	return list, nil
 }
 
-// SaveTasks saves task list to tasks.json in storageDir and triggers background git sync.
+// SaveTasks saves task list to tasks.json in storageDir.
 func SaveTasks(storageDir string, list task.List) error {
 	dir := GetStorageDir(storageDir)
 	path := GetStoragePath(dir)
+
+	// Deduplicate IDs before saving
+	_ = list.DeduplicateIDs()
 
 	data, err := json.MarshalIndent(list, "", "  ")
 	if err != nil {
@@ -175,22 +192,11 @@ func SaveTasks(storageDir string, list task.List) error {
 		return fmt.Errorf("failed to write tasks file: %w", err)
 	}
 
-	// Sync in the background so API callers don't hang
-	go BackgroundGitSync(dir)
 	return nil
 }
 
-// BackgroundGitSync performs a best-effort git commit and push for background saving.
-func BackgroundGitSync(repoPath string) {
-	if _, err := os.Stat(filepath.Join(repoPath, ".git")); os.IsNotExist(err) {
-		return
-	}
-	_ = runGit(repoPath, "add", "tasks.json", "config.json")
-	_ = runGit(repoPath, "commit", "-m", "dotdo: sync")
-	_ = runGit(repoPath, "push", "origin", "main")
-}
-
 // FullGitSync executes a full git add, commit, rebase pull, and push for storageDir.
+// NOTE: Only tasks.json is staged; config.json is NEVER added or committed to git.
 func FullGitSync(storageDir string) error {
 	dir := GetStorageDir(storageDir)
 
@@ -198,24 +204,26 @@ func FullGitSync(storageDir string) error {
 		return fmt.Errorf("git repository is not initialized in %s", dir)
 	}
 
+	_ = EnsureGitignore(dir)
+
 	status, err := getGitStatus(dir)
 	if err != nil {
 		return fmt.Errorf("failed to check git status: %w", err)
 	}
 
 	if status != "" {
-		if err := runGit(dir, "add", "tasks.json", "config.json"); err != nil {
+		if err := runGit(dir, "add", "tasks.json"); err != nil {
 			return fmt.Errorf("git add failed: %w", err)
 		}
 		if err := runGit(dir, "commit", "-m", "dotdo: auto sync update"); err != nil {
-			return fmt.Errorf("local git commit failed: %w", err)
+			// Commit might fail if no changes to tasks.json, continue with pull/push
 		}
 	}
 
 	// Try pull rebase on origin master or main
 	if err := runGit(dir, "pull", "origin", "master", "--rebase"); err != nil {
 		if errMain := runGit(dir, "pull", "origin", "main", "--rebase"); errMain != nil {
-			return fmt.Errorf("git pull rebase failed: %w", err)
+			// Ignore pull error if branch doesn't exist yet remotely
 		}
 	}
 
@@ -231,6 +239,7 @@ func FullGitSync(storageDir string) error {
 func runGit(dir string, args ...string) error {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
+	setHideWindow(cmd)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
@@ -243,6 +252,7 @@ func runGit(dir string, args ...string) error {
 func getGitStatus(dir string) (string, error) {
 	cmd := exec.Command("git", "status", "--porcelain")
 	cmd.Dir = dir
+	setHideWindow(cmd)
 	out, err := cmd.Output()
 	return string(out), err
 }
