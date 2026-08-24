@@ -28,7 +28,7 @@ If you use Android then try using the [android app](https://github.com/nicoewok/
 ## Installation & Features
 
 ### Installation & Shortcuts
-- Download and run the `dotdo-Setup-1.0.0.exe` installer.
+- Download and run the [latest Setup-x.x.x.exe](https://github.com/nicoewok/dotdo-win/releases) installer.
 - Interactive setup options allow you to automatically add dotdo to your **Start Menu** and create a **Desktop** shortcut.
 - All application assets (fonts, icons) are embedded directly into `dotdo.exe`, making the app fully portable anywhere on Windows.
 
@@ -48,7 +48,7 @@ Uninstall via "Add or remove programs". Removes all program files, Start Menu/De
 ### Requirements
 - **Go 1.22+**
 - **Git**
-- **Inno Setup 6** (optional, required only for compiling the `dotdo-Setup-1.0.0.exe` installer)
+- **Inno Setup 6** (optional, required only for compiling the `dotdo-Setup-1.0.1.exe` installer)
 
 ### Building the Executable
 ```powershell
@@ -63,8 +63,8 @@ powershell -ExecutionPolicy Bypass -File .\installer\package.ps1
 ```
 
 This generates the following artifacts in the `dist/` directory:
-- `dist/dotdo-v1.0.0-windows-amd64.zip` (Standalone portable package)
-- `dist/dotdo-Setup-1.0.0.exe` (Windows Setup Installer, compiled via Inno Setup `ISCC.exe`)
+- `dist/dotdo-v1.0.1-windows-amd64.zip` (Standalone portable package)
+- `dist/dotdo-Setup-1.0.1.exe` (Windows Setup Installer, compiled via Inno Setup `ISCC.exe`)
 
 ---
 

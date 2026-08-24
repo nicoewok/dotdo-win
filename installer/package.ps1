@@ -70,8 +70,8 @@ foreach ($path in $possiblePaths) {
 
 if ($isccPath) {
     Write-Host "  -> Found ISCC at: $isccPath" -ForegroundColor Green
-    Write-Host "  -> Compiling Windows Setup Installer..." -ForegroundColor Yellow
-    & $isccPath (Join-Path $InstallerDir "installer.iss")
+    Write-Host "  -> Compiling Windows Setup Installer (v$Version)..." -ForegroundColor Yellow
+    & $isccPath "/DMyAppVersion=$Version" (Join-Path $InstallerDir "installer.iss")
     if ($LASTEXITCODE -eq 0) {
         Write-Host "  -> Setup Installer created: dist\$AppName-Setup-$Version.exe" -ForegroundColor Green
     } else {

@@ -2,7 +2,9 @@
 ; Defines installer configuration, shortcuts, bundled assets, and complete uninstaller cleanup.
 
 #define MyAppName "dotdo"
-#define MyAppVersion "1.0.0"
+#ifndef MyAppVersion
+#define MyAppVersion "1.0.1"
+#endif
 #define MyAppPublisher "nicoewok"
 #define MyAppURL "https://github.com/nicoewok/dotdo-win"
 #define MyAppExeName "dotdo.exe"
