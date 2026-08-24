@@ -1,11 +1,12 @@
-# PowerShell Build & Packaging Script for DotDo Task Manager
+# PowerShell Build & Packaging Script for dotdo Task Manager
 # Compiles binary with embedded resources, creates portable ZIP release, and builds Inno Setup installer.
 
 $ErrorActionPreference = "Stop"
 
 $AppName = "dotdo"
 $Version = "1.0.0"
-$RootDir = $PSScriptRoot
+$InstallerDir = $PSScriptRoot
+$RootDir = (Get-Item $InstallerDir).Parent.FullName
 $DistDir = Join-Path $RootDir "dist"
 $BundleDir = Join-Path $DistDir "$AppName-v$Version"
 $ZipPath = Join-Path $DistDir "$AppName-v$Version-windows-amd64.zip"
@@ -70,7 +71,7 @@ foreach ($path in $possiblePaths) {
 if ($isccPath) {
     Write-Host "  -> Found ISCC at: $isccPath" -ForegroundColor Green
     Write-Host "  -> Compiling Windows Setup Installer..." -ForegroundColor Yellow
-    & $isccPath (Join-Path $RootDir "installer.iss")
+    & $isccPath (Join-Path $InstallerDir "installer.iss")
     if ($LASTEXITCODE -eq 0) {
         Write-Host "  -> Setup Installer created: dist\$AppName-Setup-$Version.exe" -ForegroundColor Green
     } else {
@@ -78,7 +79,7 @@ if ($isccPath) {
     }
 } else {
     Write-Warning "ISCC.exe not found in PATH or standard installation directories."
-    Write-Host "  To build setup installer, install Inno Setup 6 (https://jrsoftware.org/isextra.php) and rerun package.ps1, or run iscc installer.iss." -ForegroundColor Cyan
+    Write-Host "  To build setup installer, install Inno Setup 6 (https://jrsoftware.org/isextra.php) and rerun package.ps1, or run iscc installer\installer.iss." -ForegroundColor Cyan
 }
 
 Write-Host "`n==========================================" -ForegroundColor Cyan
@@ -86,3 +87,4 @@ Write-Host " Packaging Completed Successfully!        " -ForegroundColor Green
 Write-Host " Artifacts in: $DistDir" -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
 Get-ChildItem $DistDir | Select-Object Name, Length, LastWriteTime | Format-Table -AutoSize
+

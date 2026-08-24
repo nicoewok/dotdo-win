@@ -56,7 +56,7 @@ go build -ldflags="-H=windowsgui" -o dotdo.exe .
 To compile the GUI executable, package assets into a portable ZIP release, and build the Windows setup installer:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\package.ps1
+powershell -ExecutionPolicy Bypass -File .\installer\package.ps1
 ```
 
 This generates the following artifacts in the `dist/` directory:

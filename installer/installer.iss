@@ -20,9 +20,9 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 LicenseFile=
-OutputDir=dist
+OutputDir=..\dist
 OutputBaseFilename=dotdo-Setup-{#MyAppVersion}
-SetupIconFile=assets\icon.ico
+SetupIconFile=..\assets\icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2/ultra64
 SolidCompression=yes
@@ -37,9 +37,9 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "dotdo.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dotdo.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\assets\icon.ico"
@@ -75,3 +75,4 @@ begin
     end;
   end;
 end;
+
