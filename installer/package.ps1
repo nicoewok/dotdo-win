@@ -4,7 +4,7 @@
 $ErrorActionPreference = "Stop"
 
 $AppName = "dotdo"
-$Version = "1.0.0"
+$Version = "1.0.1"
 $InstallerDir = $PSScriptRoot
 $RootDir = (Get-Item $InstallerDir).Parent.FullName
 $DistDir = Join-Path $RootDir "dist"

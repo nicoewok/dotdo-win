@@ -88,6 +88,16 @@ type UIState struct {
 	openPatUrlBtn  widget.Clickable
 	patTokenEditor widget.Editor
 	githubMsg      string
+
+	// Add Task View & Date Picker State
+	addErrMsg        string
+	togglePickerBtn  widget.Clickable
+	isDatePickerOpen bool
+	pickerYear       int
+	pickerMonth      time.Month
+	prevMonthBtn     widget.Clickable
+	nextMonthBtn     widget.Clickable
+	calendarDayBtns  [42]widget.Clickable
 }
 
 func main() {
@@ -171,11 +181,17 @@ func run(w *app.Window, state *UIState) error {
 				state.isSyncDropdownOpen = false
 				state.titleEditor.SetText("")
 				state.dueEditor.SetText("")
+				state.addErrMsg = ""
+				now := time.Now()
+				state.pickerYear = now.Year()
+				state.pickerMonth = now.Month()
+				state.isDatePickerOpen = false
 			}
 
 			if state.backBtn.Clicked(gtx) || state.cancelBtn.Clicked(gtx) || state.githubBackBtn.Clicked(gtx) {
 				state.activeView = "list"
 				state.isSyncDropdownOpen = false
+				state.addErrMsg = ""
 			}
 
 			if state.pullBtn.Clicked(gtx) {
@@ -271,18 +287,70 @@ func run(w *app.Window, state *UIState) error {
 				_, _ = state.svc.RemoveDoneTasks()
 			}
 
-			if state.submitBtn.Clicked(gtx) {
-				title := strings.TrimSpace(state.titleEditor.Text())
-				if title != "" {
-					var dueDate time.Time
+			if state.togglePickerBtn.Clicked(gtx) {
+				state.isDatePickerOpen = !state.isDatePickerOpen
+				if state.isDatePickerOpen {
 					dueStr := strings.TrimSpace(state.dueEditor.Text())
-					if dueStr != "" {
-						if parsed, err := time.Parse("2006-01-02", dueStr); err == nil {
-							dueDate = parsed
+					if parsed, err := time.Parse("2006-01-02", dueStr); err == nil && len(dueStr) == 10 {
+						state.pickerYear = parsed.Year()
+						state.pickerMonth = parsed.Month()
+					} else {
+						now := time.Now()
+						state.pickerYear = now.Year()
+						state.pickerMonth = now.Month()
+					}
+				}
+			}
+
+			if state.prevMonthBtn.Clicked(gtx) {
+				d := time.Date(state.pickerYear, state.pickerMonth, 1, 0, 0, 0, 0, time.Local).AddDate(0, -1, 0)
+				state.pickerYear = d.Year()
+				state.pickerMonth = d.Month()
+			}
+
+			if state.nextMonthBtn.Clicked(gtx) {
+				d := time.Date(state.pickerYear, state.pickerMonth, 1, 0, 0, 0, 0, time.Local).AddDate(0, 1, 0)
+				state.pickerYear = d.Year()
+				state.pickerMonth = d.Month()
+			}
+
+			if state.isDatePickerOpen && state.pickerYear > 0 {
+				firstDay := time.Date(state.pickerYear, state.pickerMonth, 1, 0, 0, 0, 0, time.Local)
+				weekdayOffset := (int(firstDay.Weekday()) + 6) % 7
+				daysInMonth := time.Date(state.pickerYear, state.pickerMonth+1, 0, 0, 0, 0, 0, time.Local).Day()
+				for i := 0; i < 42; i++ {
+					dayNum := i - weekdayOffset + 1
+					if dayNum >= 1 && dayNum <= daysInMonth {
+						if state.calendarDayBtns[i].Clicked(gtx) {
+							selected := time.Date(state.pickerYear, state.pickerMonth, dayNum, 0, 0, 0, 0, time.Local)
+							state.dueEditor.SetText(selected.Format("2006-01-02"))
+							state.addErrMsg = ""
+							break
 						}
 					}
-					_, _ = state.svc.AddTask(title, dueDate)
-					state.activeView = "list"
+				}
+			}
+
+			if state.submitBtn.Clicked(gtx) {
+				dueStr := strings.TrimSpace(state.dueEditor.Text())
+				var dueDate time.Time
+				validDate := true
+				if dueStr != "" {
+					if parsed, err := time.Parse("2006-01-02", dueStr); err == nil && len(dueStr) == 10 {
+						dueDate = parsed
+					} else {
+						validDate = false
+					}
+				}
+				if validDate {
+					title := strings.TrimSpace(state.titleEditor.Text())
+					if title == "" {
+						state.addErrMsg = "Please enter a task title."
+					} else {
+						_, _ = state.svc.AddTask(title, dueDate)
+						state.activeView = "list"
+						state.addErrMsg = ""
+					}
 				}
 			}
 
@@ -589,6 +657,14 @@ func renderListView(gtx layout.Context, state *UIState, tasks []task.Task, listL
 }
 
 func renderAddView(gtx layout.Context, state *UIState) layout.Dimensions {
+	dueStr := strings.TrimSpace(state.dueEditor.Text())
+	isDateValid := true
+	if dueStr != "" {
+		if _, err := time.Parse("2006-01-02", dueStr); err != nil || len(dueStr) != 10 {
+			isDateValid = false
+		}
+	}
+
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		// Header Banner with Back Button
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -622,16 +698,16 @@ func renderAddView(gtx layout.Context, state *UIState) layout.Dimensions {
 			})
 		}),
 
-		layout.Rigid(layout.Spacer{Height: unit.Dp(24)}.Layout),
+		layout.Rigid(layout.Spacer{Height: unit.Dp(18)}.Layout),
 
 		// Add Task Form Card
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return renderCard(gtx, cardBg, func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{
-					Top:    unit.Dp(28),
-					Bottom: unit.Dp(28),
-					Left:   unit.Dp(24),
-					Right:  unit.Dp(24),
+					Top:    unit.Dp(22),
+					Bottom: unit.Dp(22),
+					Left:   unit.Dp(22),
+					Right:  unit.Dp(22),
 				}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -640,7 +716,7 @@ func renderAddView(gtx layout.Context, state *UIState) layout.Dimensions {
 							h.Color = accentRed
 							return h.Layout(gtx)
 						}),
-						layout.Rigid(layout.Spacer{Height: unit.Dp(18)}.Layout),
+						layout.Rigid(layout.Spacer{Height: unit.Dp(14)}.Layout),
 
 						// Title Field
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -649,14 +725,14 @@ func renderAddView(gtx layout.Context, state *UIState) layout.Dimensions {
 							lbl.Color = textPrimary
 							return lbl.Layout(gtx)
 						}),
-						layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
+						layout.Rigid(layout.Spacer{Height: unit.Dp(6)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return renderCard(gtx, inputBg, func(gtx layout.Context) layout.Dimensions {
 								return layout.Inset{
-									Top:    unit.Dp(12),
-									Bottom: unit.Dp(12),
-									Left:   unit.Dp(14),
-									Right:  unit.Dp(14),
+									Top:    unit.Dp(10),
+									Bottom: unit.Dp(10),
+									Left:   unit.Dp(12),
+									Right:  unit.Dp(12),
 								}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 									e := material.Editor(state.th, &state.titleEditor, "Enter task title...")
 									e.TextSize = unit.Sp(18)
@@ -666,25 +742,42 @@ func renderAddView(gtx layout.Context, state *UIState) layout.Dimensions {
 							})
 						}),
 
-						layout.Rigid(layout.Spacer{Height: unit.Dp(18)}.Layout),
+						layout.Rigid(layout.Spacer{Height: unit.Dp(14)}.Layout),
 
-						// Due Date Field
+						// Due Date Header with Calendar Toggle
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							lbl := material.Body1(state.th, "Due Date (YYYY-MM-DD, optional):")
-							lbl.TextSize = unit.Sp(18)
-							lbl.Color = textPrimary
-							return lbl.Layout(gtx)
+							return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+								layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+									lbl := material.Body1(state.th, "Due Date (optional):")
+									lbl.TextSize = unit.Sp(18)
+									lbl.Color = textPrimary
+									return lbl.Layout(gtx)
+								}),
+								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+									toggleLabel := "📅 Pick Date ▼"
+									if state.isDatePickerOpen {
+										toggleLabel = "📅 Close Picker ▲"
+									}
+									btn := material.Button(state.th, &state.togglePickerBtn, toggleLabel)
+									btn.TextSize = unit.Sp(14)
+									btn.Background = inputBg
+									btn.Color = textPrimary
+									return btn.Layout(gtx)
+								}),
+							)
 						}),
-						layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
+						layout.Rigid(layout.Spacer{Height: unit.Dp(6)}.Layout),
+
+						// Due Date Input Box
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return renderCard(gtx, inputBg, func(gtx layout.Context) layout.Dimensions {
 								return layout.Inset{
-									Top:    unit.Dp(12),
-									Bottom: unit.Dp(12),
-									Left:   unit.Dp(14),
-									Right:  unit.Dp(14),
+									Top:    unit.Dp(10),
+									Bottom: unit.Dp(10),
+									Left:   unit.Dp(12),
+									Right:  unit.Dp(12),
 								}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-									e := material.Editor(state.th, &state.dueEditor, "e.g. 2026-12-31")
+									e := material.Editor(state.th, &state.dueEditor, "YYYY-MM-DD (e.g. 2026-12-31)")
 									e.TextSize = unit.Sp(18)
 									e.Color = textPrimary
 									return e.Layout(gtx)
@@ -692,7 +785,43 @@ func renderAddView(gtx layout.Context, state *UIState) layout.Dimensions {
 							})
 						}),
 
-						layout.Rigid(layout.Spacer{Height: unit.Dp(28)}.Layout),
+						// Live Date Format Verification Feedback (Only shown when invalid)
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							if isDateValid {
+								return layout.Dimensions{}
+							}
+							return layout.Inset{Top: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+								lbl := material.Body2(state.th, "✕ Invalid date format (use YYYY-MM-DD)")
+								lbl.TextSize = unit.Sp(14)
+								lbl.Color = accentRed
+								return lbl.Layout(gtx)
+							})
+						}),
+
+						// Optional Calendar View
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							if !state.isDatePickerOpen {
+								return layout.Dimensions{}
+							}
+							return layout.Inset{Top: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+								return renderDatePicker(gtx, state)
+							})
+						}),
+
+						// Global Form Error Message (if any)
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							if state.addErrMsg == "" {
+								return layout.Dimensions{}
+							}
+							return layout.Inset{Top: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+								lbl := material.Body2(state.th, state.addErrMsg)
+								lbl.TextSize = unit.Sp(15)
+								lbl.Color = accentRed
+								return lbl.Layout(gtx)
+							})
+						}),
+
+						layout.Rigid(layout.Spacer{Height: unit.Dp(18)}.Layout),
 
 						// Submit & Cancel Action Buttons
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -708,8 +837,14 @@ func renderAddView(gtx layout.Context, state *UIState) layout.Dimensions {
 								layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 									btn := material.Button(state.th, &state.submitBtn, "Create Task")
 									btn.TextSize = unit.Sp(18)
-									btn.Background = accentRed
-									btn.Color = textPrimary
+									if !isDateValid {
+										btn.Background = inputBg
+										btn.Color = textMuted
+										gtx = gtx.Disabled()
+									} else {
+										btn.Background = accentRed
+										btn.Color = textPrimary
+									}
 									return btn.Layout(gtx)
 								}),
 							)
@@ -719,6 +854,179 @@ func renderAddView(gtx layout.Context, state *UIState) layout.Dimensions {
 			})
 		}),
 	)
+}
+
+func renderDatePicker(gtx layout.Context, state *UIState) layout.Dimensions {
+	now := time.Now()
+	todayYear, todayMonth, todayDay := now.Date()
+
+	if state.pickerYear == 0 || state.pickerMonth == 0 {
+		state.pickerYear = todayYear
+		state.pickerMonth = todayMonth
+	}
+
+	dueStr := strings.TrimSpace(state.dueEditor.Text())
+	var selectedYear int
+	var selectedMonth time.Month
+	var selectedDay int
+	if parsed, err := time.Parse("2006-01-02", dueStr); err == nil && len(dueStr) == 10 {
+		selectedYear = parsed.Year()
+		selectedMonth = parsed.Month()
+		selectedDay = parsed.Day()
+	}
+
+	firstDay := time.Date(state.pickerYear, state.pickerMonth, 1, 0, 0, 0, 0, time.Local)
+	weekdayOffset := (int(firstDay.Weekday()) + 6) % 7 // Monday = 0
+	daysInMonth := time.Date(state.pickerYear, state.pickerMonth+1, 0, 0, 0, 0, 0, time.Local).Day()
+
+	return renderCard(gtx, inputBg, func(gtx layout.Context) layout.Dimensions {
+		return layout.Inset{
+			Top:    unit.Dp(10),
+			Bottom: unit.Dp(10),
+			Left:   unit.Dp(12),
+			Right:  unit.Dp(12),
+		}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+				// Month Navigation Header: [ ◀ ]  MONTH YEAR  [ ▶ ]
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							btn := material.Button(state.th, &state.prevMonthBtn, "◀")
+							btn.TextSize = unit.Sp(14)
+							btn.Background = cardBg
+							btn.Color = textPrimary
+							btn.Inset = layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4), Left: unit.Dp(8), Right: unit.Dp(8)}
+							return btn.Layout(gtx)
+						}),
+						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+							monthTitle := fmt.Sprintf("%s %d", strings.ToUpper(state.pickerMonth.String()), state.pickerYear)
+							lbl := material.Body1(state.th, monthTitle)
+							lbl.TextSize = unit.Sp(16)
+							lbl.Font.Weight = font.Bold
+							lbl.Color = textPrimary
+							lbl.Alignment = text.Middle
+							return lbl.Layout(gtx)
+						}),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							btn := material.Button(state.th, &state.nextMonthBtn, "▶")
+							btn.TextSize = unit.Sp(14)
+							btn.Background = cardBg
+							btn.Color = textPrimary
+							btn.Inset = layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(4), Left: unit.Dp(8), Right: unit.Dp(8)}
+							return btn.Layout(gtx)
+						}),
+					)
+				}),
+
+				layout.Rigid(layout.Spacer{Height: unit.Dp(4)}.Layout),
+
+				// Today Sub-indicator
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					lbl := material.Body2(state.th, fmt.Sprintf("● Today: %s (Red)", now.Format("Jan 02, 2006")))
+					lbl.TextSize = unit.Sp(13)
+					lbl.Color = textMuted
+					lbl.Alignment = text.Middle
+					return lbl.Layout(gtx)
+				}),
+
+				layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
+
+				// Day of Week Header: MO TU WE TH FR SA SU
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					days := []string{"MO", "TU", "WE", "TH", "FR", "SA", "SU"}
+					var flexChildren []layout.FlexChild
+					for _, d := range days {
+						dayName := d
+						flexChildren = append(flexChildren, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+							lbl := material.Body2(state.th, dayName)
+							lbl.TextSize = unit.Sp(13)
+							lbl.Font.Weight = font.Bold
+							lbl.Color = textMuted
+							lbl.Alignment = text.Middle
+							return lbl.Layout(gtx)
+						}))
+					}
+					return layout.Flex{Axis: layout.Horizontal}.Layout(gtx, flexChildren...)
+				}),
+
+				layout.Rigid(layout.Spacer{Height: unit.Dp(6)}.Layout),
+
+				// Calendar Grid (up to 6 rows)
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					var rowChildren []layout.FlexChild
+					for row := 0; row < 6; row++ {
+						r := row
+						hasDaysInRow := false
+						for col := 0; col < 7; col++ {
+							idx := r*7 + col
+							dayNum := idx - weekdayOffset + 1
+							if dayNum >= 1 && dayNum <= daysInMonth {
+								hasDaysInRow = true
+								break
+							}
+						}
+						if !hasDaysInRow {
+							continue
+						}
+
+						rowChildren = append(rowChildren, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							var colChildren []layout.FlexChild
+							for col := 0; col < 7; col++ {
+								c := col
+								idx := r*7 + c
+								dayNum := idx - weekdayOffset + 1
+								if dayNum < 1 || dayNum > daysInMonth {
+									colChildren = append(colChildren, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+										return layout.Spacer{Height: unit.Dp(26)}.Layout(gtx)
+									}))
+								} else {
+									d := dayNum
+									colChildren = append(colChildren, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+										return layout.Inset{
+											Top:    unit.Dp(2),
+											Bottom: unit.Dp(2),
+											Left:   unit.Dp(2),
+											Right:  unit.Dp(2),
+										}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+											isToday := state.pickerYear == todayYear && state.pickerMonth == todayMonth && d == todayDay
+											isSelected := state.pickerYear == selectedYear && state.pickerMonth == selectedMonth && d == selectedDay
+
+											btn := material.Button(state.th, &state.calendarDayBtns[idx], fmt.Sprintf("%d", d))
+											btn.TextSize = unit.Sp(14)
+											btn.CornerRadius = unit.Dp(4)
+											btn.Inset = layout.Inset{
+												Top:    unit.Dp(6),
+												Bottom: unit.Dp(6),
+												Left:   unit.Dp(2),
+												Right:  unit.Dp(2),
+											}
+
+											if isToday {
+												btn.Background = accentRed
+												btn.Color = textPrimary
+												btn.Font.Weight = font.Bold
+											} else if isSelected {
+												btn.Background = accentGreen
+												btn.Color = bgDark
+												btn.Font.Weight = font.Bold
+											} else {
+												btn.Background = cardBg
+												btn.Color = textPrimary
+												btn.Font.Weight = font.Normal
+											}
+											return btn.Layout(gtx)
+										})
+									}))
+								}
+							}
+							return layout.Flex{Axis: layout.Horizontal}.Layout(gtx, colChildren...)
+						}))
+					}
+					return layout.Flex{Axis: layout.Vertical}.Layout(gtx, rowChildren...)
+				}),
+			)
+		})
+	})
 }
 
 func renderGithubConnectView(gtx layout.Context, state *UIState) layout.Dimensions {
@@ -915,9 +1223,25 @@ func renderTaskRowCard(gtx layout.Context, state *UIState, t task.Task) layout.D
 							lbl.TextSize = unit.Sp(20)
 							if t.Status == "done" {
 								lbl.Color = textMuted
-							} else {
-								lbl.Color = textPrimary
+								return layout.Stack{}.Layout(gtx,
+									layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+										return lbl.Layout(gtx)
+									}),
+									layout.Expanded(func(gtx layout.Context) layout.Dimensions {
+										lineThickness := gtx.Dp(unit.Dp(2))
+										if lineThickness < 1 {
+											lineThickness = 1
+										}
+										yCenter := gtx.Constraints.Min.Y / 2
+										yMin := yCenter - lineThickness/2
+										yMax := yMin + lineThickness
+										lineRect := image.Rect(0, yMin, gtx.Constraints.Min.X, yMax)
+										paint.FillShape(gtx.Ops, textMuted, clip.Rect(lineRect).Op())
+										return layout.Dimensions{Size: gtx.Constraints.Min}
+									}),
+								)
 							}
+							lbl.Color = textPrimary
 							return lbl.Layout(gtx)
 						}),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -963,10 +1287,10 @@ func renderTaskRowCard(gtx layout.Context, state *UIState, t task.Task) layout.D
 						btn = new(widget.Clickable)
 						state.delBtns[t.ID] = btn
 					}
-					delBtn := material.Button(state.th, btn, "✖")
+					delBtn := material.Button(state.th, btn, "×")
 					delBtn.TextSize = unit.Sp(18)
 					delBtn.Background = inputBg
-					delBtn.Color = accentRed
+					delBtn.Color = textMuted
 					return delBtn.Layout(gtx)
 				}),
 			)

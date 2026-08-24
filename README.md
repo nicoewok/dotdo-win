@@ -4,6 +4,9 @@
 
 `dotdo-win` is a native desktop todo application built with Go. It displays your task list and keeps your tasks synchronized across devices via Git.
 
+The original dotdo is a CLI/TUI tool that has the same functionality and art style. If you use Linux please try [this project](https://github.com/nicoewok/dotdo) instead!
+If you use Android then try using the [android app](https://github.com/nicoewok/dotdo-android)
+
 ---
 
 ## Bunny
