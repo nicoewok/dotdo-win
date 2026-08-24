@@ -15,6 +15,8 @@ import (
 	"gioui.org/app"
 	"gioui.org/font"
 	"gioui.org/font/opentype"
+	"gioui.org/io/event"
+	"gioui.org/io/key"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
@@ -331,7 +333,7 @@ func run(w *app.Window, state *UIState) error {
 				}
 			}
 
-			if state.submitBtn.Clicked(gtx) {
+			submitTask := func() {
 				dueStr := strings.TrimSpace(state.dueEditor.Text())
 				var dueDate time.Time
 				validDate := true
@@ -352,6 +354,35 @@ func run(w *app.Window, state *UIState) error {
 						state.addErrMsg = ""
 					}
 				}
+			}
+
+			if state.activeView == "add" {
+				for {
+					ev, ok := gtx.Event(
+						key.Filter{Focus: &state.titleEditor, Required: key.ModCtrl, Name: key.NameReturn},
+						key.Filter{Focus: &state.titleEditor, Required: key.ModCtrl, Name: key.NameEnter},
+						key.Filter{Focus: &state.dueEditor, Required: key.ModCtrl, Name: key.NameReturn},
+						key.Filter{Focus: &state.dueEditor, Required: key.ModCtrl, Name: key.NameEnter},
+						key.Filter{Required: key.ModCtrl, Name: key.NameReturn},
+						key.Filter{Required: key.ModCtrl, Name: key.NameEnter},
+						key.Filter{Focus: &state.titleEditor, Required: key.ModShortcut, Name: key.NameReturn},
+						key.Filter{Focus: &state.titleEditor, Required: key.ModShortcut, Name: key.NameEnter},
+						key.Filter{Focus: &state.dueEditor, Required: key.ModShortcut, Name: key.NameReturn},
+						key.Filter{Focus: &state.dueEditor, Required: key.ModShortcut, Name: key.NameEnter},
+						key.Filter{Required: key.ModShortcut, Name: key.NameReturn},
+						key.Filter{Required: key.ModShortcut, Name: key.NameEnter},
+					)
+					if !ok {
+						break
+					}
+					if ke, ok := ev.(key.Event); ok && ke.State == key.Press {
+						submitTask()
+					}
+				}
+			}
+
+			if state.submitBtn.Clicked(gtx) {
+				submitTask()
 			}
 
 			// Fill Window Background
@@ -657,6 +688,8 @@ func renderListView(gtx layout.Context, state *UIState, tasks []task.Task, listL
 }
 
 func renderAddView(gtx layout.Context, state *UIState) layout.Dimensions {
+	event.Op(gtx.Ops, &state.submitBtn)
+
 	dueStr := strings.TrimSpace(state.dueEditor.Text())
 	isDateValid := true
 	if dueStr != "" {
